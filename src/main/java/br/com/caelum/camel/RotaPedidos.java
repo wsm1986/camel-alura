@@ -35,7 +35,7 @@ public class RotaPedidos {
 				  	setHeader(Exchange.FILE_NAME, simple("${file:name.noext}-${header.CamelSplitIndex}.json")).
 		    	to("file:saida");
 				
-			}*/
+			}
 			@Override
 			public void configure() throws Exception {
 				from("file:pedidos?delay=5s&noop=true").
@@ -56,9 +56,33 @@ public class RotaPedidos {
 						setHeader(Exchange.HTTP_QUERY, 
 					            simple("clienteId=${property.clienteId}&pedidoId=${property.pedidoId}&ebookId=${property.ebookId}"))
 				.to("http4://localhost:8080/webservices/ebook/item");
+			}*/
+			@Override
+			public void configure() throws Exception {
+				from("file:pedidos?delay=5s&noop=true").routeId("rota-pedidos").
+					multicast().
+						to("direct:soap").
+						to("direct:http");
+
+				from("direct:soap").routeId("rota-soap").log("chamando servico soap ${body}").to("mock:soap");
+
+				from("direct:http").
+					routeId("rota-http").
+						setProperty("pedidoId", xpath("/pedido/id/text()")).
+						setProperty("email", xpath("/pedido/pagamento/email-titular/text()")).
+							split().
+								xpath("/pedido/itens/item").
+							filter().
+								xpath("/item/formato[text()='EBOOK']").
+								setProperty("ebookId", xpath("/item/livro/codigo/text()"))
+					.setHeader(Exchange.HTTP_QUERY,
+						simple("clienteId=${property.email}&pedidoId=${property.pedidoId}&ebookId=${property.ebookId}"))
+				.to("http4://localhost:8080/webservices/ebook/item");
 			}
 		});
 		context.start(); //aqui camel realmente começa a trabalhar
         Thread.sleep(10000); //esperando um pouco para dar um tempo para camel
+        
+        //multicast().parallelProcessing(). Processa as sub-rota em thread separadas
 	}
 }
