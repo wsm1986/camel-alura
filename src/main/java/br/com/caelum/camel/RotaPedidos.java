@@ -64,7 +64,12 @@ public class RotaPedidos {
 						to("direct:soap").
 						to("direct:http");
 
-				from("direct:soap").routeId("rota-soap").log("chamando servico soap ${body}").to("mock:soap");
+				from("direct:soap").
+					routeId("rota-soap").
+					to("xslt:pedido-para-soap.xslt"). 
+					log("Resultado do Template: ${body}").    
+				setHeader(Exchange.CONTENT_TYPE, constant("text/xml")).
+				to("http4://localhost:8080/webservices/financeiro");
 
 				from("direct:http").
 					routeId("rota-http").
