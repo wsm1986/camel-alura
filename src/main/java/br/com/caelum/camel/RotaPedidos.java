@@ -1,5 +1,6 @@
 package br.com.caelum.camel;
 
+import org.apache.activemq.camel.component.ActiveMQComponent;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
@@ -10,8 +11,7 @@ public class RotaPedidos {
 
 	public static void main(String[] args) throws Exception {
 
-		CamelContext context = new DefaultCamelContext();
-		context.addRoutes(new RouteBuilder() {
+
 			
 			/* Rota Simples
 			@Override
@@ -58,13 +58,16 @@ public class RotaPedidos {
 				.to("http4://localhost:8080/webservices/ebook/item");
 			}*/
 			
+		CamelContext context = new DefaultCamelContext();
+		context.addComponent("activemq", ActiveMQComponent.activeMQComponent("tcp://localhost:61616"));
+		context.addRoutes(new RouteBuilder() {
 			
 			
 			@Override
 			public void configure() throws Exception {
 				//Tratamento de Erro 
 				errorHandler(
-					    deadLetterChannel("file:erro").
+					    deadLetterChannel("activemq:queue:pedidos.DLQ").
 					        maximumRedeliveries(3).
 					            redeliveryDelay(3000).
 					        onRedelivery(new Processor() {            
@@ -76,14 +79,19 @@ public class RotaPedidos {
 					                    }
 					        })
 					);
-				
-				
-				from("file:pedidos?delay=5s&noop=true").routeId("rota-pedidos").
-					to("validator:pedido.xsd").
-					multicast().
-						to("direct:soap").
-						to("direct:http");
 
+				//usamos o componente activemq, consumindo da fila pedidos
+				from("activemq:queue:pedidos"). //alteração aqui
+				    log("${file:name}").
+				    routeId("rota-pedidos").
+				    delay(1000).
+				    to("validator:pedido.xsd").
+				    log("chegamos aqui").
+				    multicast().
+				    to("direct:soap").
+				    to("direct:http");
+				    
+				
 				from("direct:soap").
 					routeId("rota-soap").
 					to("xslt:pedido-para-soap.xslt"). 
